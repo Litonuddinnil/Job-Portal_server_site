@@ -1,14 +1,39 @@
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const cookieParser = require('cookie-parser');
 require("dotenv").config();
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 
 //middle ware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173'],
+  credentials: true,
+}));
 app.use(express.json());
+app.use(cookieParser());
+
+const logger = (req,res,next)=>{
+  console.log("inside the logger");
+  next();
+}
+
+const verifyToken = (req,res,next)=>{
+  console.log("Verify this token for the inside middle ware",req.cookies);
+  const token = req?.cookies?.token;
+  if(!token){
+    return res.status(401).send({message: "Unauthorized Access!"})
+  }
+  jwt.verify(token,process.env.JWT_SECRET,(err,decoded)=>{
+    if(err){
+      return res.status(401).send({message: "Unauthorized Access"});
+    }
+    req.user = decoded;
+    next();
+  })
+}
 
 const uri = `mongodb+srv://${process.env.DB_User}:${process.env.DB_Pass}@cluster0.jc89u.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -30,8 +55,20 @@ async function run() {
     //Auth related apis
     app.post("/jwt",async (req,res)=>{
       const user = req.body;
-      const token = jwt.sign(user,'secret',{expiresIn:"1hr"});
-      res.send(token);
+      const token = jwt.sign(user,process.env.JWT_SECRET,{expiresIn:"1hr"});
+      res.cookie('token',token,{
+        httpOnly:true,
+        secure: false , //because i am using localhost when this is production use the web application then it is true otherwise false.
+
+      })
+      .send({success: true});
+    })
+    app.post("/logout", (req,res)=>{
+      res.clearCookie('token',{
+        httpOnly:true,
+        secure:false
+      })
+      .send({success:true})
     })
 
     //job related apis
@@ -49,7 +86,8 @@ async function run() {
       }
     });
 
-    app.get("/jobs", async (req, res) => {
+    app.get("/jobs",logger, async (req, res) => {
+      console.log('inside the callback')
       const cursor = jobCollection.find();
       const result = await cursor.limit(6).toArray();
       res.send(result);
@@ -62,9 +100,14 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/job-application", async (req, res) => {
+    app.get("/job-application",verifyToken, async (req, res) => {
+      // console.log("job application working middle ware ")
       const email = req.query.email;
       const query = { applicant_email: email };
+      // console.log("cookies paisi re mamu",req.cookies);
+      if(req.user.email !== req.query.email){
+        return res.status(403).send({message:"Forbidden Access"})
+      }
       const result = await jobApplicationCollection.find(query).toArray();
 
       //fokira way
