@@ -55,7 +55,7 @@ async function run() {
     //Auth related apis
     app.post("/jwt",async (req,res)=>{
       const user = req.body;
-      const token = jwt.sign(user,process.env.JWT_SECRET,{expiresIn:"1hr"});
+      const token = jwt.sign(user,process.env.JWT_SECRET,{expiresIn:"10h"});
       res.cookie('token',token,{
         httpOnly:true,
         secure: false , //because i am using localhost when this is production use the web application then it is true otherwise false.
